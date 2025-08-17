@@ -191,14 +191,11 @@ export default function TicketCreationScreen({ navigation }) {
           {pin && <Marker coordinate={pin} />}
         </MapView>
 
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => {
-            Alert.alert("Instruction", "Tap on the map to place a marker for the issue.");
-          }}
-        >
-          <Text style={styles.addButtonText}>Specify issue location</Text>
-        </TouchableOpacity>
+        <View style={styles.instructionBox}>
+          <Text style={styles.instructionText}>
+            Drop a pin on the map to report an issue location
+          </Text>
+        </View>
 
         {/* Popup confirmation */}
         {showConfirmPopup && (
@@ -327,6 +324,20 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.3)" },
   modalContent: { backgroundColor: "#fff", padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
   modalButton: { paddingVertical: 15, alignItems: "center", borderBottomColor: "#ddd", borderBottomWidth: 1 },
+
+  instructionBox: {
+    backgroundColor: "#f0f0f0", 
+    padding: 17,
+    borderRadius: 8,
+    marginVertical: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+instructionText: {
+  fontSize: 16,
+  color: "#333",
+  textAlign: "center",
+},
 
   photoContainer: {
     position: "absolute",
