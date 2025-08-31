@@ -3,29 +3,30 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import AdminPanel from "../screens/Client/AdminPanel";
 import TicketManagement from "../screens/Client/TicketManagement";
 import ProfileScreen from "../screens/User/ProfileScreen";
-import colors from "../constants/colors";
 import Ionicons from "react-native-vector-icons/Ionicons";
+import MapScreen from "../screens/User/MapScreen";
 
 const Tab = createBottomTabNavigator();
 
-export default function ClientNavigator() {
+export default function AdminNavigator() {
   return (
     <Tab.Navigator initialRouteName="Map"
       screenOptions={({ route }) => ({
         tabBarIcon: ({ color, size }) => {
           let iconName;
-          if (route.name === "Dashboard") iconName = "grid-outline";
-          else if (route.name === "ManageTickets") iconName = "construct-outline";
+          if (route.name === "Panel") iconName = "grid-outline";
+          else if (route.name === "Tickets") iconName = "construct-outline";
           else iconName = "person-outline";
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: "gray"
+        tabBarActiveTintColor: "blue",
+        tabBarInactiveTintColor: "gray",
       })}
     >
-      <Tab.Screen name="Dashboard" component={AdminPanel} options={{ title: "Panel" }} />
-      <Tab.Screen name="ManageTickets" component={TicketManagement} options={{ title: "Control" }} />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: "Profile" }} />
+        <Tab.Screen name="Map" component={MapScreen} />
+        <Tab.Screen name="Panel" component={AdminPanel} />
+        <Tab.Screen name="Tickets" component={TicketManagement} />
+        <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
 }

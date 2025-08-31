@@ -1,57 +1,39 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, Button, StyleSheet, Alert } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "../../../firebase";
 
-export default function LoginScreen({ navigation, onLogin }) {
-  const [username, setUsername] = useState("");
+export default function LoginScreen({ navigation }) {
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const handleLoginPress = () => {
-    if (!username.trim() || !password.trim()) {
-      Alert.alert("Error", "Please, fill in both fields.");
-      return;
+  const handleLogin = async () => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      Alert.alert("Login Successful", "You have logged in successfully");
+    } catch (error) {
+      Alert.alert("Error", error.message);
     }
-    // Тут можно добавить реальную проверку логина
-    onLogin("user"); // передаём роль, например "user"
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Login</Text>
-      <TextInput
-        placeholder="Username"
-        value={username}
-        onChangeText={setUsername}
-        style={styles.input}
-        autoCapitalize="none"
-      />
-      <TextInput
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        style={styles.input}
-        secureTextEntry
-      />
-      <Button title="Login" onPress={handleLoginPress} />
-      <Button title="Registration"
-         onPress={() => {
-         console.log('Navigate to Register');
-         navigation.navigate("Register");
-        }} 
-      />
+      <Text>Sign in</Text>
+      <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
+      <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
+      <TouchableOpacity onPress={handleLogin} style={styles.button}>
+        <Text style={styles.buttonText}>Login</Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => navigation.navigate("Registration")}>
+        <Text>No account? Register</Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20 },
-  title: { fontSize: 24, marginBottom: 20 },
-  input: {
-    width: "100%",
-    height: 40,
-    borderColor: "#ccc",
-    borderWidth: 1,
-    marginBottom: 15,
-    paddingHorizontal: 10,
-    borderRadius: 5,
-  },
+  container: { flex: 1, justifyContent: "center", padding: 20 },
+  input: { borderWidth: 1, marginVertical: 10, padding: 10, borderRadius: 5 },
+  button: { backgroundColor: "blue", padding: 15, borderRadius: 5, marginTop: 10 },
+  buttonText: { color: "white", textAlign: "center" },
 });

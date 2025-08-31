@@ -1,4 +1,3 @@
-// TicketCreationScreen.js
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
@@ -18,6 +17,8 @@ import {
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
+import { db, auth } from "../../../firebase";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 
 export default function TicketCreationScreen({ navigation }) {
   const [location, setLocation] = useState(null);
@@ -27,12 +28,12 @@ export default function TicketCreationScreen({ navigation }) {
   const [imageUri, setImageUri] = useState(null);
   const [description, setDescription] = useState("");
 
-  // аниматоры
-  const slideAnim = useRef(new Animated.Value(300)).current; // панель снизу (300px вниз -> 0)
-  const keyboardAnim = useRef(new Animated.Value(0)).current; // высота клавиатуры
+  // анимации
+  const slideAnim = useRef(new Animated.Value(300)).current;
+  const keyboardAnim = useRef(new Animated.Value(0)).current;
 
+  // слушаем клавиатуру
   useEffect(() => {
-    // подписываемся на события клавиатуры
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
 
@@ -64,7 +65,7 @@ export default function TicketCreationScreen({ navigation }) {
     };
   }, [keyboardAnim]);
 
-  // Получаем текущие координаты
+  // получаем текущее местоположение
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -77,17 +78,15 @@ export default function TicketCreationScreen({ navigation }) {
     })();
   }, []);
 
-  // Показываем/скрываем панель снизу при изменении imageUri
+  // следим за появлением фото
   useEffect(() => {
     if (imageUri) {
-      // slide in
       Animated.timing(slideAnim, {
         toValue: 0,
         duration: 300,
         useNativeDriver: true,
       }).start();
     } else {
-      // slide out
       Animated.timing(slideAnim, {
         toValue: 300,
         duration: 250,
@@ -152,14 +151,35 @@ export default function TicketCreationScreen({ navigation }) {
     }
   };
 
-  const createTicket = () => {
+  const createTicket = async () => {
     if (!pin) {
       Alert.alert("Error", "Please select issue location on the map");
       return;
     }
-    // send pin, imageUri, description to server...
-    Alert.alert("Ticket created!", "Thank you for your report");
-    navigation.goBack();
+
+    try {
+      await addDoc(collection(db, "tickets"), {
+        description: description || "No description",
+        latitude: pin.latitude,
+        longitude: pin.longitude,
+        imageUri: imageUri || null,
+        status: "new",
+        createdAt: serverTimestamp(),
+        createdBy: auth.currentUser?.uid || null,
+      });
+
+      Alert.alert("Ticket created!", "Thank you for your report");
+
+      // очистка состояния
+      setPin(null);
+      setImageUri(null);
+      setDescription("");
+
+      // редирект на главную вкладку (Map)
+      navigation.navigate("Map");
+    } catch (error) {
+      Alert.alert("Error", error.message);
+    }
   };
 
   if (!location) {
@@ -171,8 +191,6 @@ export default function TicketCreationScreen({ navigation }) {
   }
 
   const startRegion = getStartRegion();
-
-  // комбинированный сдвиг: slideAnim - keyboardAnim
   const translateY = Animated.add(slideAnim, Animated.multiply(keyboardAnim, -1));
 
   return (
@@ -214,45 +232,42 @@ export default function TicketCreationScreen({ navigation }) {
 
         {/* Photo modal */}
         <Modal
-  animationType="slide"
-  transparent
-  visible={showPhotoModal}
-  onRequestClose={() => setShowPhotoModal(false)}
->
-  <KeyboardAvoidingView
-    behavior={Platform.OS === "ios" ? "padding" : "height"}
-    style={{ flex: 1, justifyContent: "flex-end" }}
-    keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
-  >
-    <View style={styles.modalOverlay}>
-      <View style={styles.modalContent}>
-        <Text style={{ fontWeight: "bold", marginBottom: 10 }}>Add a photo</Text>
-        <TouchableOpacity onPress={takePhoto} style={styles.modalButton}>
-          <Text>Take photo</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={pickImage} style={styles.modalButton}>
-          <Text>Choose from library</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => setShowPhotoModal(false)}
-          style={[styles.modalButton, { backgroundColor: "#ccc" }]}
+          animationType="slide"
+          transparent
+          visible={showPhotoModal}
+          onRequestClose={() => setShowPhotoModal(false)}
         >
-          <Text>Cancel</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  </KeyboardAvoidingView>
-</Modal>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ flex: 1, justifyContent: "flex-end" }}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <Text style={{ fontWeight: "bold", marginBottom: 10 }}>Add a photo</Text>
+                <TouchableOpacity onPress={takePhoto} style={styles.modalButton}>
+                  <Text>Take photo</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={pickImage} style={styles.modalButton}>
+                  <Text>Choose from library</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setShowPhotoModal(false)}
+                  style={[styles.modalButton, { backgroundColor: "#ccc" }]}
+                >
+                  <Text>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
 
-        {/* Если фото выбрано — превью и поле описания */}
-        {/** Animated view: slideAnim controls appearance, keyboardAnim pushes it up */}
+        {/* Фото + описание */}
         <Animated.View
           pointerEvents={imageUri ? "auto" : "none"}
           style={[
             styles.photoContainer,
-            {
-              transform: [{ translateY: translateY }],
-            },
+            { transform: [{ translateY: translateY }] },
           ]}
         >
           {imageUri ? (
@@ -294,18 +309,6 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   map: { flex: 1 },
-  addButton: {
-    position: "absolute",
-    right: 20,
-    bottom: 40,
-    backgroundColor: "#ff6b6b",
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    borderRadius: 30,
-    elevation: 3,
-  },
-  addButtonText: { color: "#fff", fontWeight: "700" },
-
   confirmPopup: {
     position: "absolute",
     bottom: 140,
@@ -317,27 +320,51 @@ const styles = StyleSheet.create({
     elevation: 4,
     alignItems: "center",
   },
-  popupButtons: { flexDirection: "row", justifyContent: "space-between", width: "60%" },
-  popupButton: { backgroundColor: "#007AFF", paddingVertical: 10, paddingHorizontal: 15, borderRadius: 5, marginHorizontal: 5 },
+  popupButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "60%",
+  },
+  popupButton: {
+    backgroundColor: "#007AFF",
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+    marginHorizontal: 5,
+  },
   popupButtonText: { color: "#fff", fontWeight: "bold" },
 
-  modalOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.3)" },
-  modalContent: { backgroundColor: "#fff", padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
-  modalButton: { paddingVertical: 15, alignItems: "center", borderBottomColor: "#ddd", borderBottomWidth: 1 },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.3)",
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    padding: 20,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  modalButton: {
+    paddingVertical: 15,
+    alignItems: "center",
+    borderBottomColor: "#ddd",
+    borderBottomWidth: 1,
+  },
 
   instructionBox: {
-    backgroundColor: "#f0f0f0", 
+    backgroundColor: "#f0f0f0",
     padding: 17,
     borderRadius: 8,
     marginVertical: 20,
     alignItems: "center",
     justifyContent: "center",
   },
-instructionText: {
-  fontSize: 16,
-  color: "#333",
-  textAlign: "center",
-},
+  instructionText: {
+    fontSize: 16,
+    color: "#333",
+    textAlign: "center",
+  },
 
   photoContainer: {
     position: "absolute",
@@ -352,8 +379,27 @@ instructionText: {
     shadowRadius: 6,
     elevation: 6,
   },
-  photoPreview: { width: 120, height: 120, borderRadius: 10, alignSelf: "center", marginBottom: 10 },
-  descriptionInput: { borderColor: "#ccc", borderWidth: 1, borderRadius: 10, padding: 10, height: 100, marginBottom: 10, textAlignVertical: "top" },
-  submitButton: { backgroundColor: "#007AFF", paddingVertical: 12, borderRadius: 10, alignItems: "center" },
+  photoPreview: {
+    width: 120,
+    height: 120,
+    borderRadius: 10,
+    alignSelf: "center",
+    marginBottom: 10,
+  },
+  descriptionInput: {
+    borderColor: "#ccc",
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    height: 100,
+    marginBottom: 10,
+    textAlignVertical: "top",
+  },
+  submitButton: {
+    backgroundColor: "#007AFF",
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+  },
   submitButtonText: { color: "#fff", fontWeight: "bold" },
 });

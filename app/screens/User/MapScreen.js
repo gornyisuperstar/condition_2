@@ -1,7 +1,7 @@
 // MapScreen.js
 import React, { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from "react-native";
-import MapView, { Marker } from "react-native-maps";
+import MapView, { Marker, Polygon } from "react-native-maps";
 import * as Location from "expo-location";
 
 export default function MapScreen({ navigation }) {
@@ -28,7 +28,7 @@ export default function MapScreen({ navigation }) {
     );
   }
 
-  // main map = 100% (broad view)
+  // main map 100% (broad view)
   const initialRegion = {
     latitude: location.latitude,
     longitude: location.longitude,
