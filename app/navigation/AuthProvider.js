@@ -3,45 +3,52 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 
-const AuthContext = createContext();
-
+const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
 
-// провайдер авторизации
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
+  const [orgCode, setOrgCode] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const userRef = doc(db, "users", firebaseUser.uid);
-        let snap = await getDoc(userRef);
-
-        if (!snap.exists()) {
-          await setDoc(userRef, {
-            email: firebaseUser.email,
-            role: "user", // дефолтная роль
-            createdAt: serverTimestamp(),
-          });
-          snap = await getDoc(userRef); // перечитываем
+      try {
+        if (!firebaseUser) {
+          setUser(null);
+          setRole(null);
+          setOrgCode(null);
+          return;
         }
 
+        const ref = doc(db, "users", firebaseUser.uid);
+        let snap = await getDoc(ref);
+
+        if (!snap.exists()) {
+          await setDoc(ref, {
+            email: firebaseUser.email ?? "",
+            role: "user",
+            orgCode: null,
+            createdAt: serverTimestamp(),
+          });
+          snap = await getDoc(ref);
+        }
+
+        const data = snap.data() || {};
         setUser(firebaseUser);
-        setRole(snap.data()?.role || null);
-      } else {
-        setUser(null);
-        setRole(null);
+        setRole(data.role ?? "user");
+        setOrgCode(data.orgCode ?? null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return unsubscribe;
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, role, loading }}>
+    <AuthContext.Provider value={{ user, role, orgCode, loading }}>
       {children}
     </AuthContext.Provider>
   );

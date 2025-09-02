@@ -1,13 +1,16 @@
+// app/screens/User/TicketCreationScreen.js
 import React, { useEffect, useState } from "react";
-import { View, Text, Alert, StyleSheet, Platform, Modal, TouchableOpacity, SafeAreaView, ActionSheetIOS } from "react-native";
+import {
+  View, Text, StyleSheet, Alert, Platform, Modal, TouchableOpacity, SafeAreaView, ActionSheetIOS,
+} from "react-native";
 import { SafeAreaView as RNSafeAreaView } from "react-native-safe-area-context";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
-import { useTheme } from "../../context/ThemeContext";  // ✅ правильный импорт
+import { useTheme } from "../../context/ThemeContext";
 
 export default function TicketCreationScreen({ navigation }) {
-  const { appTheme } = useTheme();                      // ✅ получаем тему из провайдера
+  const { appTheme } = useTheme();
   const isDark = appTheme === "dark";
 
   const [location, setLocation] = useState(null);
@@ -27,8 +30,8 @@ export default function TicketCreationScreen({ navigation }) {
     })();
   }, []);
 
-  const proceedToForm = (imageUri = null, coords) => {
-    navigation.navigate("TicketForm", { pin: coords, imageUri });
+  const proceedToForm = ({ imageUri = null, base64 = null, mime = "jpg", coords }) => {
+    navigation.navigate("TicketForm", { pin: coords, imageUri, imageBase64: base64, imageMime: mime });
   };
 
   const openChooser = (coords) => {
@@ -45,17 +48,35 @@ export default function TicketCreationScreen({ navigation }) {
           if (idx === 0) {
             const p = await ImagePicker.requestCameraPermissionsAsync();
             if (p.status !== "granted") return;
-            const res = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.85 });
-            if (!res.canceled && res.assets?.[0]?.uri) proceedToForm(res.assets[0].uri, coords);
-            else proceedToForm(null, coords);
+            const res = await ImagePicker.launchCameraAsync({
+              allowsEditing: true,
+              quality: 0.85,
+              base64: true,                    // 👈 ключевой момент
+            });
+            if (!res.canceled && res.assets?.[0]) {
+              const a = res.assets[0];
+              const mime = (a.type && a.type.startsWith("image/")) ? a.type : "jpg";
+              proceedToForm({ imageUri: a.uri, base64: a.base64, mime, coords });
+            } else {
+              proceedToForm({ coords });
+            }
           } else if (idx === 1) {
             const p = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (p.status !== "granted") return;
-            const res = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, quality: 0.85 });
-            if (!res.canceled && res.assets?.[0]?.uri) proceedToForm(res.assets[0].uri, coords);
-            else proceedToForm(null, coords);
+            const res = await ImagePicker.launchImageLibraryAsync({
+              allowsEditing: true,
+              quality: 0.85,
+              base64: true,                    // 👈 ключевой момент
+            });
+            if (!res.canceled && res.assets?.[0]) {
+              const a = res.assets[0];
+              const mime = (a.type && a.type.startsWith("image/")) ? a.type : "jpg";
+              proceedToForm({ imageUri: a.uri, base64: a.base64, mime, coords });
+            } else {
+              proceedToForm({ coords });
+            }
           } else if (idx === 2) {
-            proceedToForm(null, coords);
+            proceedToForm({ coords });
           }
         }
       );
@@ -89,8 +110,7 @@ export default function TicketCreationScreen({ navigation }) {
   };
 
   return (
-    <RNSafeAreaView edges={["top"]} style={{ flex: 1, backgroundColor: isDark ? "#111" : "#fff" }}>
-      {/* ВАЖНО: карта не absoluteFill, а flex:1, чтобы учитывать safe-area сверху */}
+    <RNSafeAreaView edges={["top"]} style={{ flex: 1, backgroundColor: isDark ? "#111" : "#fff", marginTop: 50  }}>
       <MapView style={{ flex: 1 }} initialRegion={initialRegion} onPress={onMapPress} showsUserLocation>
         {pin && <Marker coordinate={pin} />}
       </MapView>
@@ -101,7 +121,7 @@ export default function TicketCreationScreen({ navigation }) {
           { backgroundColor: isDark ? "#1b1b1b" : "#f4f4f5", borderColor: isDark ? "#2a2a2a" : "#e5e7eb" },
         ]}
       >
-        <Text style={{ color: isDark ? "#e5e7eb" : "#374151" }}>
+        <Text style={{ color: isDark ? "#e5e7eb" : "#374151", }}>
           Drop a pin on the map to report an issue location
         </Text>
       </View>
@@ -122,9 +142,14 @@ export default function TicketCreationScreen({ navigation }) {
               onPress={async () => {
                 const p = await ImagePicker.requestCameraPermissionsAsync();
                 if (p.status === "granted") {
-                  const res = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.85 });
-                  if (!res.canceled && res.assets?.[0]?.uri) proceedToForm(res.assets[0].uri, pendingCoords);
-                  else proceedToForm(null, pendingCoords);
+                  const res = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.85, base64: true });
+                  if (!res.canceled && res.assets?.[0]) {
+                    const a = res.assets[0];
+                    const mime = (a.type && a.type.startsWith("image/")) ? a.type : "jpg";
+                    proceedToForm({ imageUri: a.uri, base64: a.base64, mime, coords: pendingCoords });
+                  } else {
+                    proceedToForm({ coords: pendingCoords });
+                  }
                 }
                 setChooserVisible(false);
               }}
@@ -137,9 +162,14 @@ export default function TicketCreationScreen({ navigation }) {
               onPress={async () => {
                 const p = await ImagePicker.requestMediaLibraryPermissionsAsync();
                 if (p.status === "granted") {
-                  const res = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, quality: 0.85 });
-                  if (!res.canceled && res.assets?.[0]?.uri) proceedToForm(res.assets[0].uri, pendingCoords);
-                  else proceedToForm(null, pendingCoords);
+                  const res = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, quality: 0.85, base64: true });
+                  if (!res.canceled && res.assets?.[0]) {
+                    const a = res.assets[0];
+                    const mime = (a.type && a.type.startsWith("image/")) ? a.type : "jpg";
+                    proceedToForm({ imageUri: a.uri, base64: a.base64, mime, coords: pendingCoords });
+                  } else {
+                    proceedToForm({ coords: pendingCoords });
+                  }
                 }
                 setChooserVisible(false);
               }}
@@ -151,7 +181,7 @@ export default function TicketCreationScreen({ navigation }) {
               style={[styles.sheetItem, { backgroundColor: isDark ? "#2a2a2a" : "#f3f4f6" }]}
               onPress={() => {
                 setChooserVisible(false);
-                proceedToForm(null, pendingCoords);
+                proceedToForm({ coords: pendingCoords });
               }}
             >
               <Text style={{ color: isDark ? "#fff" : "#111" }}>Without photo</Text>

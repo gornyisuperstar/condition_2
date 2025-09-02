@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import * as SplashScreen from "expo-splash-screen";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { ThemeProvider } from "./app/context/ThemeContext";           // 👈 подключаем провайдер темы
+import { ThemeProvider } from "./app/context/ThemeContext";           
 import { AuthProvider } from "./app/navigation/AuthProvider";
 import RootNavigator from "./app/navigation/RootNavigator";
 
@@ -28,7 +28,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <ThemeProvider>       {/* 👈 ОБЯЗАТЕЛЬНО оборачиваем ВСЁ приложение */}
+      <ThemeProvider>      
         <AuthProvider>
           <RootNavigator />
         </AuthProvider>
