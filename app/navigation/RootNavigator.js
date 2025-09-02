@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text } from "react-native";
+import { View, Text, Alert } from "react-native";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../../firebase";
 import { doc, getDoc } from "firebase/firestore";
@@ -11,11 +11,16 @@ import ClientNavigator from "./ClientNavigator";
 import AdminNavigator from "./AdminNavigator";
 import SplashScreen from "../screens/SplashScreen";
 import { useTheme } from "../context/ThemeContext";
+import { consumeFlash } from "../utils/flash"; 
 
 export default function RootNavigator() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // куда по умолчанию заходить в авторизационном стеке
+  const [initialAuthRoute, setInitialAuthRoute] = useState("Login");
+
   const { appTheme } = useTheme();
 
   useEffect(() => {
@@ -28,10 +33,22 @@ export default function RootNavigator() {
             setRole(userDoc.data().role);
           } else {
             console.log("⚠️ No user document found for:", firebaseUser.uid);
+            setRole(null);
           }
         } else {
+          // Пользователь вышел/удалён
           setUser(null);
           setRole(null);
+
+          // 👇 читаем одноразовое сообщение и целевой экран
+          const flash = await consumeFlash();
+          if (flash?.target === "Registration") {
+            setInitialAuthRoute("Registration");
+            if (flash.message) setTimeout(() => Alert.alert("Success", flash.message), 0);
+          } else {
+            setInitialAuthRoute("Login");
+            if (flash?.message) setTimeout(() => Alert.alert("Info", flash.message), 0);
+          }
         }
       } catch (error) {
         console.log("🔥 Error while fetching user role:", error.message);
@@ -47,7 +64,7 @@ export default function RootNavigator() {
   return (
     <NavigationContainer theme={appTheme === "dark" ? DarkTheme : DefaultTheme}>
       {!user ? (
-        <AuthNavigator />
+        <AuthNavigator initialRouteName={initialAuthRoute} /> 
       ) : role === "superadmin" || role === "admin" ? (
         <AdminNavigator />
       ) : role === "organization" ? (

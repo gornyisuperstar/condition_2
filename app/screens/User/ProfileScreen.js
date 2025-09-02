@@ -25,6 +25,7 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { signOut, deleteUser } from "firebase/auth";
+import { setFlash } from "../../utils/flash"; // 👈 ДОБАВЛЕНО: импорт flash-утилиты
 
 export default function ProfileScreen() {
   const { appTheme, setAppTheme, mapTheme, setMapTheme } = useTheme();
@@ -118,7 +119,8 @@ export default function ProfileScreen() {
     try {
       setLoading(true);
       await signOut(auth);
-      // RootNavigator will redirect to Auth flow via onAuthStateChanged
+      // RootNavigator сам вернёт в Auth, можно также (необязательно) добавить flash:
+      // await setFlash({ target: "Login", message: "You have logged out." });
     } catch (e) {
       Alert.alert("Error", e.message);
     } finally {
@@ -151,11 +153,17 @@ export default function ProfileScreen() {
       // 2) Delete user profile doc
       await deleteDoc(doc(db, "users", user.uid));
 
+      // 👇 ДОБАВЛЕНО: устанавливаем одноразовый flash, который прочитает RootNavigator
+      await setFlash({
+        target: "Registration",
+        message: "Your account has been deleted.",
+      });
+
       // 3) Delete auth user (may require recent login)
       await deleteUser(user);
 
-      Alert.alert("Done", "Your account has been deleted.");
-      // onAuthStateChanged will take care of navigation
+      // onAuthStateChanged в RootNavigator отработает,
+      // прочитает flash и откроет Registration + покажет Alert.
     } catch (e) {
       if (e?.code === "auth/requires-recent-login") {
         Alert.alert(

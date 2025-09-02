@@ -5,9 +5,9 @@ import RegistrationScreen from "../screens/Auth/RegistrationScreen";
 
 const Stack = createNativeStackNavigator();
 
-export default function AuthNavigator({ onLogin }) {
+export default function AuthNavigator({ onLogin, initialRouteName = "Login" }) {
   return (
-    <Stack.Navigator>
+    <Stack.Navigator initialRouteName={initialRouteName}>
       <Stack.Screen name="Login">
         {(props) => <LoginScreen {...props} onLogin={onLogin} />}
       </Stack.Screen>
