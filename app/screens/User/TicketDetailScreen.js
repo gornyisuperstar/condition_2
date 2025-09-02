@@ -1,76 +1,92 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, ActivityIndicator, Alert } from "react-native";
-import { db } from "../../../firebase";
+import { View, Text, StyleSheet, Image, ScrollView, ActivityIndicator } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { db, storage } from "../../../firebase";
 import { doc, getDoc } from "firebase/firestore";
+import { ref, getDownloadURL } from "firebase/storage";
+import { useTheme } from "../../context/ThemeContext"; 
 
-export default function TicketDetailsScreen({ route }) {
-  const { ticketId } = route.params; // 👈 получаем ID из параметров
+async function normalizeImageUrl(url) {
+  if (!url) return null;
+  if (url.startsWith("gs://")) {
+    try {
+      const r = ref(storage, url);
+      return await getDownloadURL(r);
+    } catch {
+      return null;
+    }
+  }
+  return url;
+}
+
+export default function TicketDetailScreen({ route }) {
+  const { ticketId } = route.params;
   const [ticket, setTicket] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { appTheme } = useTheme?.() || { appTheme: "light" };
+  const isDark = appTheme === "dark";
 
   useEffect(() => {
-    const fetchTicket = async () => {
+    (async () => {
       try {
-        const ticketDoc = await getDoc(doc(db, "tickets", ticketId));
-        if (ticketDoc.exists()) {
-          setTicket(ticketDoc.data());
+        const snap = await getDoc(doc(db, "tickets", ticketId));
+        if (snap.exists()) {
+          const data = snap.data();
+          data.imageUrl = await normalizeImageUrl(data.imageUrl);
+          setTicket(data);
         } else {
-          Alert.alert("Error", "Ticket not found");
+          setTicket(null);
         }
-      } catch (error) {
-        Alert.alert("Error", error.message);
       } finally {
         setLoading(false);
       }
-    };
-
-    fetchTicket();
+    })();
   }, [ticketId]);
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="blue" />
-      </View>
+      <SafeAreaView edges={["top"]} style={[styles.center, { backgroundColor: isDark ? "#111" : "#fff" }]}>
+        <ActivityIndicator />
+      </SafeAreaView>
     );
   }
 
   if (!ticket) {
     return (
-      <View style={styles.center}>
-        <Text>No ticket data</Text>
-      </View>
+      <SafeAreaView edges={["top"]} style={[styles.center, { backgroundColor: isDark ? "#111" : "#fff" }]}>
+        <Text style={{ color: isDark ? "#fff" : "#111" }}>Ticket not found</Text>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Ticket Details</Text>
-      <Text style={styles.label}>Description:</Text>
-      <Text style={styles.value}>{ticket.description || "No description"}</Text>
+    <SafeAreaView edges={["top"]} style={{ flex: 1, backgroundColor: isDark ? "#111" : "#fff" }}>
+      <ScrollView contentContainerStyle={{ padding: 16 }} contentInsetAdjustmentBehavior="automatic">
+        {ticket.imageUrl ? <Image source={{ uri: ticket.imageUrl }} style={styles.image} /> : null}
 
-      <Text style={styles.label}>Status:</Text>
-      <Text style={styles.value}>{ticket.status || "New"}</Text>
+        <Text style={[styles.label, { color: isDark ? "#aaa" : "#666" }]}>Description</Text>
+        <Text style={[styles.value, { color: isDark ? "#fff" : "#111" }]}>{ticket.description || "No description"}</Text>
 
-      <Text style={styles.label}>Location:</Text>
-      <Text style={styles.value}>
-        {ticket.latitude}, {ticket.longitude}
-      </Text>
+        <Text style={[styles.label, { color: isDark ? "#aaa" : "#666" }]}>Status</Text>
+        <Text style={[styles.value, { color: isDark ? "#fff" : "#111" }]}>{ticket.status || "new"}</Text>
 
-      <Text style={styles.label}>Created At:</Text>
-      <Text style={styles.value}>
-        {ticket.createdAt?.toDate
-          ? ticket.createdAt.toDate().toLocaleString()
-          : "N/A"}
-      </Text>
-    </View>
+        <Text style={[styles.label, { color: isDark ? "#aaa" : "#666" }]}>Location</Text>
+        <Text style={[styles.value, { color: isDark ? "#fff" : "#111" }]}>
+          {ticket.latitude}, {ticket.longitude}
+        </Text>
+
+        <Text style={[styles.label, { color: isDark ? "#aaa" : "#666" }]}>Created</Text>
+        <Text style={[styles.value, { color: isDark ? "#fff" : "#111" }]}>
+          {ticket.createdAt?.toDate ? ticket.createdAt.toDate().toLocaleString() : "N/A"}
+        </Text>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#fff" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  title: { fontSize: 22, fontWeight: "bold", marginBottom: 20 },
-  label: { fontSize: 16, fontWeight: "600", marginTop: 10 },
-  value: { fontSize: 16, color: "#333" },
+  image: { width: "100%", height: 220, borderRadius: 12, marginBottom: 16, backgroundColor: "#222" },
+  label: { fontSize: 13, marginTop: 10 },
+  value: { fontSize: 16, marginBottom: 6 },
 });

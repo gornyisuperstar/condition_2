@@ -1,71 +1,20 @@
-import React, { useState, useEffect, useRef } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  Modal,
-  Alert,
-  Image,
-  Platform,
-  KeyboardAvoidingView,
-  ScrollView,
-  Animated,
-  Keyboard,
-} from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, Alert, StyleSheet, Platform, Modal, TouchableOpacity, SafeAreaView, ActionSheetIOS } from "react-native";
+import { SafeAreaView as RNSafeAreaView } from "react-native-safe-area-context";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
-import { db, auth } from "../../../firebase";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { useTheme } from "../../context/ThemeContext";  // ✅ правильный импорт
 
 export default function TicketCreationScreen({ navigation }) {
+  const { appTheme } = useTheme();                      // ✅ получаем тему из провайдера
+  const isDark = appTheme === "dark";
+
   const [location, setLocation] = useState(null);
   const [pin, setPin] = useState(null);
-  const [showConfirmPopup, setShowConfirmPopup] = useState(false);
-  const [showPhotoModal, setShowPhotoModal] = useState(false);
-  const [imageUri, setImageUri] = useState(null);
-  const [description, setDescription] = useState("");
+  const [chooserVisible, setChooserVisible] = useState(false);
+  const [pendingCoords, setPendingCoords] = useState(null);
 
-  // анимации
-  const slideAnim = useRef(new Animated.Value(300)).current;
-  const keyboardAnim = useRef(new Animated.Value(0)).current;
-
-  // слушаем клавиатуру
-  useEffect(() => {
-    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
-    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
-
-    const onKeyboardShow = (e) => {
-      const height = e.endCoordinates ? e.endCoordinates.height : 300;
-      const duration = e.duration ?? 250;
-      Animated.timing(keyboardAnim, {
-        toValue: height,
-        duration,
-        useNativeDriver: true,
-      }).start();
-    };
-
-    const onKeyboardHide = (e) => {
-      const duration = e.duration ?? 200;
-      Animated.timing(keyboardAnim, {
-        toValue: 0,
-        duration,
-        useNativeDriver: true,
-      }).start();
-    };
-
-    const showSub = Keyboard.addListener(showEvent, onKeyboardShow);
-    const hideSub = Keyboard.addListener(hideEvent, onKeyboardHide);
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, [keyboardAnim]);
-
-  // получаем текущее местоположение
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -78,328 +27,164 @@ export default function TicketCreationScreen({ navigation }) {
     })();
   }, []);
 
-  // следим за появлением фото
-  useEffect(() => {
-    if (imageUri) {
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
+  const proceedToForm = (imageUri = null, coords) => {
+    navigation.navigate("TicketForm", { pin: coords, imageUri });
+  };
+
+  const openChooser = (coords) => {
+    setPendingCoords(coords);
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: "Add a photo",
+          options: ["Take photo", "Choose from library", "Without photo", "Cancel"],
+          cancelButtonIndex: 3,
+          userInterfaceStyle: isDark ? "dark" : "light",
+        },
+        async (idx) => {
+          if (idx === 0) {
+            const p = await ImagePicker.requestCameraPermissionsAsync();
+            if (p.status !== "granted") return;
+            const res = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.85 });
+            if (!res.canceled && res.assets?.[0]?.uri) proceedToForm(res.assets[0].uri, coords);
+            else proceedToForm(null, coords);
+          } else if (idx === 1) {
+            const p = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (p.status !== "granted") return;
+            const res = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, quality: 0.85 });
+            if (!res.canceled && res.assets?.[0]?.uri) proceedToForm(res.assets[0].uri, coords);
+            else proceedToForm(null, coords);
+          } else if (idx === 2) {
+            proceedToForm(null, coords);
+          }
+        }
+      );
     } else {
-      Animated.timing(slideAnim, {
-        toValue: 300,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [imageUri, slideAnim]);
-
-  const getStartRegion = () => {
-    if (!location) return null;
-    return {
-      latitude: location.latitude,
-      longitude: location.longitude,
-      latitudeDelta: 0.004,
-      longitudeDelta: 0.004,
-    };
-  };
-
-  const onMapPress = (event) => {
-    setPin(event.nativeEvent.coordinate);
-    setShowConfirmPopup(true);
-  };
-
-  const confirmPin = () => {
-    setShowConfirmPopup(false);
-    setShowPhotoModal(true);
-  };
-  const cancelPin = () => {
-    setPin(null);
-    setShowConfirmPopup(false);
-  };
-
-  const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission denied", "Gallery permission is required");
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      allowsEditing: true,
-      quality: 0.7,
-    });
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      setImageUri(result.assets[0].uri);
-      setShowPhotoModal(false);
+      setChooserVisible(true);
     }
   };
 
-  const takePhoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") {
-      Alert.alert("Permission denied", "Camera permission is required");
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      quality: 0.7,
-    });
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      setImageUri(result.assets[0].uri);
-      setShowPhotoModal(false);
-    }
-  };
-
-  const createTicket = async () => {
-    if (!pin) {
-      Alert.alert("Error", "Please select issue location on the map");
-      return;
-    }
-
-    try {
-      await addDoc(collection(db, "tickets"), {
-        description: description || "No description",
-        latitude: pin.latitude,
-        longitude: pin.longitude,
-        imageUri: imageUri || null,
-        status: "new",
-        createdAt: serverTimestamp(),
-        createdBy: auth.currentUser?.uid || null,
-      });
-
-      Alert.alert("Ticket created!", "Thank you for your report");
-
-      // очистка состояния
-      setPin(null);
-      setImageUri(null);
-      setDescription("");
-
-      // редирект на главную вкладку (Map)
-      navigation.navigate("Map");
-    } catch (error) {
-      Alert.alert("Error", error.message);
-    }
+  const onMapPress = (e) => {
+    const coords = e.nativeEvent.coordinate;
+    setPin(coords);
+    Alert.alert("Create ticket at this location?", "", [
+      { text: "No", style: "cancel" },
+      { text: "Yes", onPress: () => openChooser(coords) },
+    ]);
   };
 
   if (!location) {
     return (
-      <View style={styles.center}>
-        <Text>Loading your location...</Text>
-      </View>
+      <RNSafeAreaView edges={["top"]} style={[styles.center, { backgroundColor: isDark ? "#111" : "#fff" }]}>
+        <Text style={{ color: isDark ? "#fff" : "#111" }}>Loading your location...</Text>
+      </RNSafeAreaView>
     );
   }
 
-  const startRegion = getStartRegion();
-  const translateY = Animated.add(slideAnim, Animated.multiply(keyboardAnim, -1));
+  const initialRegion = {
+    latitude: location.latitude,
+    longitude: location.longitude,
+    latitudeDelta: 0.004,
+    longitudeDelta: 0.004,
+  };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={{ flex: 1 }}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
-    >
-      <View style={styles.container}>
-        <MapView
-          style={styles.map}
-          initialRegion={startRegion}
-          onPress={onMapPress}
-          showsUserLocation
-        >
-          {pin && <Marker coordinate={pin} />}
-        </MapView>
+    <RNSafeAreaView edges={["top"]} style={{ flex: 1, backgroundColor: isDark ? "#111" : "#fff" }}>
+      {/* ВАЖНО: карта не absoluteFill, а flex:1, чтобы учитывать safe-area сверху */}
+      <MapView style={{ flex: 1 }} initialRegion={initialRegion} onPress={onMapPress} showsUserLocation>
+        {pin && <Marker coordinate={pin} />}
+      </MapView>
 
-        <View style={styles.instructionBox}>
-          <Text style={styles.instructionText}>
-            Drop a pin on the map to report an issue location
-          </Text>
-        </View>
-
-        {/* Popup confirmation */}
-        {showConfirmPopup && (
-          <View style={styles.confirmPopup}>
-            <Text style={{ marginBottom: 10 }}>Fix the issue location?</Text>
-            <View style={styles.popupButtons}>
-              <TouchableOpacity onPress={confirmPin} style={styles.popupButton}>
-                <Text style={styles.popupButtonText}>Yes</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={cancelPin} style={styles.popupButton}>
-                <Text style={styles.popupButtonText}>No</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* Photo modal */}
-        <Modal
-          animationType="slide"
-          transparent
-          visible={showPhotoModal}
-          onRequestClose={() => setShowPhotoModal(false)}
-        >
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            style={{ flex: 1, justifyContent: "flex-end" }}
-            keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                <Text style={{ fontWeight: "bold", marginBottom: 10 }}>Add a photo</Text>
-                <TouchableOpacity onPress={takePhoto} style={styles.modalButton}>
-                  <Text>Take photo</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={pickImage} style={styles.modalButton}>
-                  <Text>Choose from library</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setShowPhotoModal(false)}
-                  style={[styles.modalButton, { backgroundColor: "#ccc" }]}
-                >
-                  <Text>Cancel</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </KeyboardAvoidingView>
-        </Modal>
-
-        {/* Фото + описание */}
-        <Animated.View
-          pointerEvents={imageUri ? "auto" : "none"}
-          style={[
-            styles.photoContainer,
-            { transform: [{ translateY: translateY }] },
-          ]}
-        >
-          {imageUri ? (
-            <ScrollView
-              contentContainerStyle={{ paddingBottom: 20 }}
-              keyboardShouldPersistTaps="handled"
-            >
-              <Image source={{ uri: imageUri }} style={styles.photoPreview} />
-              <TextInput
-                style={styles.descriptionInput}
-                placeholder="Describe and detailize the issue (optional)"
-                multiline
-                value={description}
-                onChangeText={setDescription}
-                returnKeyType="done"
-                blurOnSubmit={true}
-              />
-              <TouchableOpacity onPress={createTicket} style={styles.submitButton}>
-                <Text style={styles.submitButtonText}>Create Ticket</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => {
-                  setImageUri(null);
-                  setDescription("");
-                }}
-                style={[styles.submitButton, { marginTop: 8, backgroundColor: "#ccc" }]}
-              >
-                <Text style={{ color: "#000" }}>Remove photo</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          ) : null}
-        </Animated.View>
+      <View
+        style={[
+          styles.tip,
+          { backgroundColor: isDark ? "#1b1b1b" : "#f4f4f5", borderColor: isDark ? "#2a2a2a" : "#e5e7eb" },
+        ]}
+      >
+        <Text style={{ color: isDark ? "#e5e7eb" : "#374151" }}>
+          Drop a pin on the map to report an issue location
+        </Text>
       </View>
-    </KeyboardAvoidingView>
+
+      {/* ANDROID chooser */}
+      <Modal
+        transparent
+        visible={Platform.OS !== "ios" && chooserVisible}
+        onRequestClose={() => setChooserVisible(false)}
+        animationType="fade"
+      >
+        <View style={styles.overlay}>
+          <SafeAreaView style={[styles.sheet, { backgroundColor: isDark ? "#1b1b1b" : "#fff" }]}>
+            <Text style={[styles.sheetTitle, { color: isDark ? "#fff" : "#111" }]}>Add a photo</Text>
+
+            <TouchableOpacity
+              style={styles.sheetItem}
+              onPress={async () => {
+                const p = await ImagePicker.requestCameraPermissionsAsync();
+                if (p.status === "granted") {
+                  const res = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.85 });
+                  if (!res.canceled && res.assets?.[0]?.uri) proceedToForm(res.assets[0].uri, pendingCoords);
+                  else proceedToForm(null, pendingCoords);
+                }
+                setChooserVisible(false);
+              }}
+            >
+              <Text style={{ color: isDark ? "#fff" : "#111" }}>Take photo</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.sheetItem}
+              onPress={async () => {
+                const p = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                if (p.status === "granted") {
+                  const res = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, quality: 0.85 });
+                  if (!res.canceled && res.assets?.[0]?.uri) proceedToForm(res.assets[0].uri, pendingCoords);
+                  else proceedToForm(null, pendingCoords);
+                }
+                setChooserVisible(false);
+              }}
+            >
+              <Text style={{ color: isDark ? "#fff" : "#111" }}>Choose from library</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.sheetItem, { backgroundColor: isDark ? "#2a2a2a" : "#f3f4f6" }]}
+              onPress={() => {
+                setChooserVisible(false);
+                proceedToForm(null, pendingCoords);
+              }}
+            >
+              <Text style={{ color: isDark ? "#fff" : "#111" }}>Without photo</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.sheetItem, { backgroundColor: isDark ? "#2a2a2a" : "#f3f4f6" }]}
+              onPress={() => setChooserVisible(false)}
+            >
+              <Text style={{ color: isDark ? "#fff" : "#111" }}>Cancel</Text>
+            </TouchableOpacity>
+          </SafeAreaView>
+        </View>
+      </Modal>
+    </RNSafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  map: { flex: 1 },
-  confirmPopup: {
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  tip: {
     position: "absolute",
-    bottom: 140,
-    left: 20,
-    right: 20,
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 14,
-    elevation: 4,
-    alignItems: "center",
-  },
-  popupButtons: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "60%",
-  },
-  popupButton: {
-    backgroundColor: "#007AFF",
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 5,
-    marginHorizontal: 5,
-  },
-  popupButtonText: { color: "#fff", fontWeight: "bold" },
-
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.3)",
-  },
-  modalContent: {
-    backgroundColor: "#fff",
-    padding: 20,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
-  modalButton: {
-    paddingVertical: 15,
-    alignItems: "center",
-    borderBottomColor: "#ddd",
-    borderBottomWidth: 1,
-  },
-
-  instructionBox: {
-    backgroundColor: "#f0f0f0",
-    padding: 17,
-    borderRadius: 8,
-    marginVertical: 20,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  instructionText: {
-    fontSize: 16,
-    color: "#333",
-    textAlign: "center",
-  },
-
-  photoContainer: {
-    position: "absolute",
-    bottom: 0,
-    width: "100%",
-    backgroundColor: "#fff",
-    padding: 12,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 6,
-  },
-  photoPreview: {
-    width: 120,
-    height: 120,
-    borderRadius: 10,
-    alignSelf: "center",
-    marginBottom: 10,
-  },
-  descriptionInput: {
-    borderColor: "#ccc",
+    left: 16,
+    right: 16,
+    top: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 12,
     borderWidth: 1,
-    borderRadius: 10,
-    padding: 10,
-    height: 100,
-    marginBottom: 10,
-    textAlignVertical: "top",
-  },
-  submitButton: {
-    backgroundColor: "#007AFF",
-    paddingVertical: 12,
-    borderRadius: 10,
     alignItems: "center",
   },
-  submitButtonText: { color: "#fff", fontWeight: "bold" },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "flex-end" },
+  sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 12, paddingBottom: 12, paddingHorizontal: 16 },
+  sheetTitle: { fontWeight: "700", marginBottom: 8, fontSize: 16 },
+  sheetItem: { paddingVertical: 16, borderRadius: 12, paddingHorizontal: 10, marginBottom: 8 },
 });

@@ -1,7 +1,11 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { Picker } from "@react-native-picker/picker";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import {
+  createUserWithEmailAndPassword,
+  sendEmailVerification,
+  signOut,
+} from "firebase/auth";
 import { auth, db } from "../../../firebase";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 
@@ -19,33 +23,55 @@ export default function RegistrationScreen({ navigation }) {
     }
 
     try {
-      // 1. Create user in Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       let finalRole = role;
 
-      // 2. If organization → check orgCode
-      if (role === "organization") {
+      // 🔹 Если обычный пользователь
+      if (role === "user") {
+        await sendEmailVerification(user);
+
+        await setDoc(doc(db, "users", user.uid), {
+          email: user.email,
+          role: "user",
+          createdAt: new Date(),
+        });
+
+        Alert.alert(
+          "Success",
+          "Account created! Please check your email to verify before logging in."
+        );
+
+        // 🚪 выходим, чтобы не висеть на Unknown role
+        await signOut(auth);
+        navigation.navigate("Login");
+        return;
+      }
+
+      // 🔹 Если организация (или старое client → приравниваем к organization)
+      if (role === "organization" || role === "client") {
         const orgDoc = await getDoc(doc(db, "orgCodes", orgCode));
 
         if (!orgDoc.exists() || orgDoc.data().used) {
-          Alert.alert("Error", "Invalid or already used organization code. Account created, but pending approval.");
-          finalRole = "pending_org"; // 🚨 временный статус
+          Alert.alert("Error", "Invalid or already used organization code.");
+          finalRole = "pending_org";
         } else {
-          // Mark orgCode as used
+          // Помечаем код как использованный
           await setDoc(doc(db, "orgCodes", orgCode), { ...orgDoc.data(), used: true });
 
-          // Create organization entry
+          // Создаём запись в organizations
           await setDoc(doc(db, "organizations", orgCode), {
             orgCode,
             orgName: orgDoc.data().orgName || "Unnamed Organization",
             createdAt: new Date(),
             createdBy: user.uid,
           });
+
+          finalRole = "organization";
         }
       }
 
-      // 3. Save user profile in Firestore (всегда)
+      // 🔹 Сохраняем юзера в Firestore (organization или pending_org)
       await setDoc(doc(db, "users", user.uid), {
         email: user.email,
         role: finalRole,
@@ -54,10 +80,8 @@ export default function RegistrationScreen({ navigation }) {
       });
 
       console.log("✅ User document created:", user.uid, finalRole);
-
       Alert.alert("Success", "You are registered now. Please log in.");
       navigation.navigate("Login");
-
     } catch (error) {
       Alert.alert("Error", error.message);
     }

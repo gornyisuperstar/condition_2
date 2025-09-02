@@ -1,38 +1,38 @@
+// App.js
 import React, { useEffect, useState } from "react";
 import * as SplashScreen from "expo-splash-screen";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { ThemeProvider } from "./app/context/ThemeContext";           // 👈 подключаем провайдер темы
 import { AuthProvider } from "./app/navigation/AuthProvider";
 import RootNavigator from "./app/navigation/RootNavigator";
 
-// Не скрывать splash автоматически
 SplashScreen.preventAutoHideAsync();
 
 export default function App() {
   const [appIsReady, setAppIsReady] = useState(false);
 
   useEffect(() => {
-    async function prepare() {
+    (async () => {
       try {
-        // Имитация загрузки данных (например, шрифтов/ассетов)
-        await new Promise(resolve => setTimeout(resolve, 2000)); // ✅ фиксированная задержка 2с
+        await new Promise((resolve) => setTimeout(resolve, 5000));
       } catch (e) {
         console.warn(e);
       } finally {
         setAppIsReady(true);
-        await SplashScreen.hideAsync(); // ✅ убираем splash вручную
+        await SplashScreen.hideAsync();
       }
-    }
-
-    prepare();
+    })();
   }, []);
 
-  if (!appIsReady) {
-    return null; // Пока splash показывается
-  }
+  if (!appIsReady) return null;
 
   return (
-    <AuthProvider>
-      <RootNavigator />
-    </AuthProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>       {/* 👈 ОБЯЗАТЕЛЬНО оборачиваем ВСЁ приложение */}
+        <AuthProvider>
+          <RootNavigator />
+        </AuthProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
-

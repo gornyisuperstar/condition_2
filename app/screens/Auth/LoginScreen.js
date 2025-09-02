@@ -9,8 +9,18 @@ export default function LoginScreen({ navigation }) {
 
   const handleLogin = async () => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      Alert.alert("Login Successful", "You have logged in successfully");
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Проверяем верификацию
+      if (!user.emailVerified) {
+        Alert.alert(
+          "Email not verified",
+          "Your account was created, but you must verify your email before logging in. Check your inbox and confirm the link."
+        );
+      } else {
+        Alert.alert("Login Successful", "You have logged in successfully");
+      }
     } catch (error) {
       Alert.alert("Error", error.message);
     }
@@ -18,22 +28,52 @@ export default function LoginScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <Text>Sign in</Text>
-      <TextInput placeholder="Email" value={email} onChangeText={setEmail} style={styles.input} />
-      <TextInput placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry style={styles.input} />
+      <Text style={styles.title}>Sign in</Text>
+
+      <TextInput
+        placeholder="Email"
+        value={email}
+        onChangeText={setEmail}
+        style={styles.input}
+        keyboardType="email-address"
+        autoCapitalize="none"
+      />
+
+      <TextInput
+        placeholder="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        style={styles.input}
+      />
+
       <TouchableOpacity onPress={handleLogin} style={styles.button}>
         <Text style={styles.buttonText}>Login</Text>
       </TouchableOpacity>
+
       <TouchableOpacity onPress={() => navigation.navigate("Registration")}>
-        <Text>No account? Register</Text>
+        <Text style={styles.link}>No account? Register</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", padding: 20 },
-  input: { borderWidth: 1, marginVertical: 10, padding: 10, borderRadius: 5 },
-  button: { backgroundColor: "blue", padding: 15, borderRadius: 5, marginTop: 10 },
-  buttonText: { color: "white", textAlign: "center" },
+  container: { flex: 1, justifyContent: "center", padding: 20, backgroundColor: "#fff" },
+  title: { fontSize: 22, fontWeight: "bold", marginBottom: 20, textAlign: "center" },
+  input: {
+    borderWidth: 1,
+    borderColor: "#ccc",
+    marginVertical: 10,
+    padding: 10,
+    borderRadius: 5,
+  },
+  button: {
+    backgroundColor: "blue",
+    padding: 15,
+    borderRadius: 5,
+    marginTop: 10,
+  },
+  buttonText: { color: "white", textAlign: "center", fontWeight: "600" },
+  link: { marginTop: 15, textAlign: "center", color: "blue" },
 });
