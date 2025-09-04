@@ -1,38 +1,23 @@
-// app/lib/uploadImage.js
-import { ref, uploadString, getDownloadURL } from "firebase/storage";
-import { storage, auth } from "../../firebase";
+// app/utils/uploadImage.js
+export async function uploadImage(uri) {
+  if (!uri) return null;
 
-/** Определяем contentType по расширению/подсказке */
-function resolveMime(extOrMime) {
-  const v = (extOrMime || "").toLowerCase();
-  if (v.startsWith("image/")) return v;
-  if (v === "png") return "image/png";
-  if (v === "webp") return "image/webp";
-  if (v === "heic" || v === "heif") return "image/heic";
-  // по умолчанию
-  return "image/jpeg";
-}
+  let filename = uri.split("/").pop();
+  let match = /\.(\w+)$/.exec(filename);
+  let type = match ? `image/${match[1]}` : `image`;
 
-/**
- * Надёжная загрузка в Firebase Storage (Expo-friendly).
- * Принимает raw base64 (БЕЗ префикса data:) и MIME/расширение.
- * Возвращает https downloadURL.
- */
-export async function uploadImageFromBase64(base64, extOrMime = "jpg") {
-  if (!base64) return null;
+  let formData = new FormData();
+  formData.append("image", { uri, name: filename, type });
 
-  const contentType = resolveMime(extOrMime);
-  const uid = auth.currentUser?.uid ?? "anonymous";
-  const fileExt = contentType === "image/png" ? "png"
-               : contentType === "image/webp" ? "webp"
-               : contentType === "image/heic" ? "heic"
-               : "jpg";
+  const response = await fetch("http://10.0.2.2:5000/upload", {
+    method: "POST",
+    body: formData,
+  });
 
-  const filename = `${Date.now()}.${fileExt}`;
-  const storageRef = ref(storage, `tickets/${uid}/${filename}`);
+  if (!response.ok) {
+    throw new Error(`Upload failed: ${response.status}`);
+  }
 
-  // грузим как base64 — НИКАКИХ Blob/ArrayBuffer
-  await uploadString(storageRef, base64, "base64", { contentType });
-
-  return await getDownloadURL(storageRef);
+  const data = await response.json();
+  return data.url;
 }

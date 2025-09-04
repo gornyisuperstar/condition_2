@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../../../firebase";
+import { auth, db } from "../../../firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState("");
@@ -9,14 +10,17 @@ export default function LoginScreen({ navigation }) {
 
   const handleLogin = async () => {
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
       const user = userCredential.user;
 
-      // Проверяем верификацию
-      if (!user.emailVerified) {
+      // читаем userDoc из Firestore
+      const snap = await getDoc(doc(db, "users", user.uid));
+      const role = snap.exists() ? snap.data().role : null;
+
+      if (role === "user" && !user.emailVerified) {
         Alert.alert(
           "Email not verified",
-          "Your account was created, but you must verify your email before logging in. Check your inbox and confirm the link."
+          "Please check your inbox and confirm your email before logging in."
         );
       } else {
         Alert.alert("Login Successful", "You have logged in successfully");

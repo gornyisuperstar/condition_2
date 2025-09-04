@@ -1,10 +1,11 @@
-// App.js
+
 import React, { useEffect, useState } from "react";
 import * as SplashScreen from "expo-splash-screen";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { ThemeProvider } from "./app/context/ThemeContext";           
+import { ThemeProvider } from "./app/context/ThemeContext";
 import { AuthProvider } from "./app/navigation/AuthProvider";
 import RootNavigator from "./app/navigation/RootNavigator";
+
 
 SplashScreen.preventAutoHideAsync();
 
@@ -12,7 +13,7 @@ export default function App() {
   const [appIsReady, setAppIsReady] = useState(false);
 
   useEffect(() => {
-    (async () => {
+    async function prepare() {
       try {
         await new Promise((resolve) => setTimeout(resolve, 5000));
       } catch (e) {
@@ -21,14 +22,17 @@ export default function App() {
         setAppIsReady(true);
         await SplashScreen.hideAsync();
       }
-    })();
+    }
+    prepare();
   }, []);
 
-  if (!appIsReady) return null;
+  if (!appIsReady) {
+    return null;
+  }
 
   return (
     <SafeAreaProvider>
-      <ThemeProvider>      
+      <ThemeProvider>
         <AuthProvider>
           <RootNavigator />
         </AuthProvider>

@@ -16,12 +16,15 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "We need your location to show it on the map"
       },
+      "config": {
+        "googleMapsApiKey": "AIzaSyA2ECcjGWoCHvZj-LB46yk6hSgpSHyHGuI"
+      },
       "supportsTablet": true
     },
     "android": {
       "config": {
         "googleMaps": {
-          "apiKey": "YOUR_ANDROID_KEY"
+          "apiKey": "AIzaSyA2ECcjGWoCHvZj-LB46yk6hSgpSHyHGuI"
         }
       },
       "adaptiveIcon": {

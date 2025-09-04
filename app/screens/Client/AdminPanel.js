@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, FlatList, StyleSheet, Alert, ActivityIndicator } from "react-native";
-import { collection, getDocs, doc, setDoc } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "../../../firebase";
 import { useAuth } from "../../navigation/AuthProvider";
 
@@ -10,7 +10,7 @@ function generateOrgCode(length = 8) {
 }
 
 export default function AdminPanel() {
-  const { user, loading } = useAuth();
+  const { user, role, loading } = useAuth();
   const [codes, setCodes] = useState([]);
   const [busy, setBusy] = useState(false);
 
@@ -48,6 +48,29 @@ export default function AdminPanel() {
     }
   };
 
+  const runMigration = async () => {
+    try {
+      setBusy(true);
+      const ticketsSnap = await getDocs(collection(db, "tickets"));
+
+      let updated = 0;
+      for (let d of ticketsSnap.docs) {
+        const data = d.data();
+        if (!data.orgCode) {
+          // временно всем ставим TESTCODE
+          await updateDoc(doc(db, "tickets", d.id), { orgCode: "TESTCODE" });
+          updated++;
+        }
+      }
+      Alert.alert("Migration complete", `${updated} tickets updated.`);
+      fetchCodes();
+    } catch (e) {
+      Alert.alert("Error", e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -63,6 +86,12 @@ export default function AdminPanel() {
       <TouchableOpacity style={styles.button} onPress={createNewCode} disabled={busy}>
         <Text style={styles.buttonText}>Generate New Code</Text>
       </TouchableOpacity>
+
+      {role === "superadmin" && (
+        <TouchableOpacity style={[styles.button, { backgroundColor: "green" }]} onPress={runMigration} disabled={busy}>
+          <Text style={styles.buttonText}>Run Migration</Text>
+        </TouchableOpacity>
+      )}
 
       {busy ? <ActivityIndicator style={{ marginVertical: 10 }} /> : null}
 

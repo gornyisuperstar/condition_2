@@ -21,13 +21,13 @@ import { doc, setDoc, getDoc } from "firebase/firestore";
 import { useTheme } from "../../context/ThemeContext";
 
 export default function RegistrationScreen({ navigation }) {
-  const { appTheme } = useTheme();              // 👈 берем тему из контекста
+  const { appTheme } = useTheme();
   const isDark = appTheme === "dark";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState("user");     // default
+  const [role, setRole] = useState("user"); // default
   const [orgCode, setOrgCode] = useState("");
 
   const ui = {
@@ -53,14 +53,19 @@ export default function RegistrationScreen({ navigation }) {
     }
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email.trim(),
+        password
+      );
       const user = userCredential.user;
       let finalRole = role;
 
-      // user: email verification flow
+      // USER: стандартный флоу
       if (role === "user") {
         await sendEmailVerification(user);
 
+        // сначала пишем в users
         await setDoc(doc(db, "users", user.uid), {
           email: user.email,
           role: "user",
@@ -72,44 +77,54 @@ export default function RegistrationScreen({ navigation }) {
           "Account created! Please check your email to verify before logging in."
         );
 
-        await signOut(auth); // чтобы не висеть на Unknown role
+        await signOut(auth);
         navigation.navigate("Login");
         return;
       }
 
-      // organization (client -> normalized to organization)
+      // ORGANIZATION
       if (role === "organization" || role === "client") {
         if (!orgCode.trim()) {
           Alert.alert("Error", "Organization code is required.");
           return;
         }
 
-        const orgDoc = await getDoc(doc(db, "orgCodes", orgCode.trim()));
+        const orgDocRef = doc(db, "orgCodes", orgCode.trim());
+        const orgDoc = await getDoc(orgDocRef);
 
         if (!orgDoc.exists() || orgDoc.data().used) {
           Alert.alert("Error", "Invalid or already used organization code.");
           finalRole = "pending_org";
         } else {
-          await setDoc(doc(db, "orgCodes", orgCode.trim()), { ...orgDoc.data(), used: true });
+          // 1. сначала сохраняем пользователя
+          await setDoc(doc(db, "users", user.uid), {
+            email: user.email,
+            role: "organization",
+            orgCode: orgCode.trim(),
+            createdAt: new Date(),
+          });
 
-          await setDoc(doc(db, "organizations", orgCode.trim()), {
+          // 2. создаём организацию
+          await setDoc(doc(db, "organizations", user.uid), {
             orgCode: orgCode.trim(),
             orgName: orgDoc.data().orgName || "Unnamed Organization",
             createdAt: new Date(),
             createdBy: user.uid,
+            email: user.email,
+            phone: "",
+            territory: [], // пустой массив
+          });
+
+          // 3. помечаем код использованным
+          await setDoc(orgDocRef, {
+            ...orgDoc.data(),
+            used: true,
+            updatedAt: new Date(),
           });
 
           finalRole = "organization";
         }
       }
-
-      // save user (organization or pending_org)
-      await setDoc(doc(db, "users", user.uid), {
-        email: user.email,
-        role: finalRole,
-        orgCode: finalRole === "organization" ? orgCode.trim() : null,
-        createdAt: new Date(),
-      });
 
       Alert.alert("Success", "You are registered now. Please log in.");
       navigation.navigate("Login");
@@ -162,7 +177,6 @@ export default function RegistrationScreen({ navigation }) {
 
         <Text style={[styles.label, { color: ui.text }]}>Select Role</Text>
 
-        {/* оборачиваем Picker в контейнер с фоном/рамкой, чтобы в тёмной теме не пропадал */}
         <View
           style={[
             styles.pickerBox,
@@ -196,7 +210,10 @@ export default function RegistrationScreen({ navigation }) {
           />
         )}
 
-        <TouchableOpacity onPress={handleRegister} style={[styles.button, { backgroundColor: ui.buttonBg }]}>
+        <TouchableOpacity
+          onPress={handleRegister}
+          style={[styles.button, { backgroundColor: ui.buttonBg }]}
+        >
           <Text style={[styles.buttonText, { color: ui.buttonText }]}>Submit</Text>
         </TouchableOpacity>
       </View>
