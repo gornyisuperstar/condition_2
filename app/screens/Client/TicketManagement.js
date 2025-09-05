@@ -1,25 +1,43 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Image, ActivityIndicator
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  Image,
+  ActivityIndicator,
 } from "react-native";
 import { db, auth } from "../../../firebase";
 import {
-  collection, query, where, getDocs, orderBy, limit, doc, getDoc
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+  doc,
+  getDoc,
 } from "firebase/firestore";
 import { useTheme } from "../../context/ThemeContext";
 import { api } from "../../utils/serverConfig";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { normalizeImageUrl } from "../../utils/imageUrl"; // ✅ импортируем
 
 const priorityColors = { High: "#ef4444", Medium: "#f97316", Low: "#22c55e" };
 
 function pointInPolygon(point, polygon) {
   if (!polygon || polygon.length < 3) return false;
-  let x = point.latitude, y = point.longitude, inside = false;
+  let x = point.latitude,
+    y = point.longitude,
+    inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    let xi = polygon[i].latitude, yi = polygon[i].longitude;
-    let xj = polygon[j].latitude, yj = polygon[j].longitude;
-    const intersect = ((yi > y) !== (yj > y)) &&
-      (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+    let xi = polygon[i].latitude,
+      yi = polygon[i].longitude;
+    let xj = polygon[j].latitude,
+      yj = polygon[j].longitude;
+    const intersect =
+      yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
     if (intersect) inside = !inside;
   }
   return inside;
@@ -28,6 +46,7 @@ function pointInPolygon(point, polygon) {
 export default function TicketManagement() {
   const { appTheme } = useTheme();
   const isDark = appTheme === "dark";
+  const navigation = useNavigation();
 
   const [loading, setLoading] = useState(true);
   const [orgCode, setOrgCode] = useState(null);
@@ -47,48 +66,62 @@ export default function TicketManagement() {
     accent: "#007AFF",
   };
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        if (!auth.currentUser) return;
+  // функция загрузки тикетов
+  const loadTickets = async () => {
+    try {
+      if (!auth.currentUser) return;
 
-        // 1) тянем организацию (orgCode + territory)
-        const orgRef = doc(db, "organizations", auth.currentUser.uid);
-        const orgSnap = await getDoc(orgRef);
-        if (orgSnap.exists()) {
-          const org = orgSnap.data();
-          setOrgCode(org.orgCode);
-          setTerritory((org.territory || []).map(p => ({
+      // 1) загружаем организацию
+      const orgRef = doc(db, "organizations", auth.currentUser.uid);
+      const orgSnap = await getDoc(orgRef);
+      if (orgSnap.exists()) {
+        const org = orgSnap.data();
+        setOrgCode(org.orgCode);
+        setTerritory(
+          (org.territory || []).map((p) => ({
             latitude: p.latitude ?? p.lat,
             longitude: p.longitude ?? p.lng,
-          })));
-        }
-
-        // 2) читаем тикеты данной организации
-        if (orgCode || orgSnap?.data()?.orgCode) {
-          const oc = orgCode || orgSnap.data().orgCode;
-          const q = query(
-            collection(db, "tickets"),
-            where("orgCode", "==", oc),
-            orderBy("createdAt", "desc"),
-            limit(200)
-          );
-          const snap = await getDocs(q);
-          const data = [];
-          snap.forEach(d => data.push({ id: d.id, ...d.data() }));
-          setTickets(data);
-        }
-      } catch (e) {
-        console.error("Error loading tickets:", e);
-      } finally {
-        setLoading(false);
+          }))
+        );
       }
-    };
-    load();
-  }, [orgCode]);
+
+      // 2) загружаем тикеты
+      const oc = orgSnap?.data()?.orgCode;
+      if (oc) {
+        const q = query(
+          collection(db, "tickets"),
+          where("orgCode", "==", oc),
+          orderBy("createdAt", "desc"),
+          limit(200)
+        );
+        const snap = await getDocs(q);
+        const data = [];
+        for (const d of snap.docs) {
+          const raw = d.data();
+          const img = await normalizeImageUrl(raw.imageUrl || null); // ✅ нормализуем
+          data.push({ id: d.id, ...raw, imageUrl: img });
+        }
+        setTickets(data);
+      }
+    } catch (e) {
+      console.error("Error loading tickets:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTickets();
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadTickets();
+    }, [orgCode])
+  );
 
   const visible = useMemo(() => {
-    let items = tickets.filter(t =>
+    let items = tickets.filter((t) =>
       territory.length === 0
         ? true
         : pointInPolygon(
@@ -97,49 +130,38 @@ export default function TicketManagement() {
           )
     );
 
-    if (filter !== "All") items = items.filter(t => t.status === filter);
+    if (filter !== "All") items = items.filter((t) => t.status === filter);
 
     if (sortBy === "priority") {
       const order = { High: 1, Medium: 2, Low: 3 };
-      items.sort((a,b) => (order[a.priority]||9) - (order[b.priority]||9));
+      items.sort((a, b) => (order[a.priority] || 9) - (order[b.priority] || 9));
     } else if (sortBy === "status") {
-      items.sort((a,b) => (a.status||"").localeCompare(b.status||""));
+      items.sort((a, b) => (a.status || "").localeCompare(b.status || ""));
     } else {
-      items.sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+      items.sort(
+        (a, b) =>
+          (b.createdAt?.toMillis?.() || 0) -
+          (a.createdAt?.toMillis?.() || 0)
+      );
     }
     return items;
   }, [tickets, territory, filter, sortBy]);
 
-  // ✅ теперь обновляем через сервер
   const cycleStatus = async (t) => {
-    const order = ["Open","In Progress","Resolved"];
-    const next = order[(order.indexOf(t.status||"Open")+1) % order.length];
+    const order = ["Open", "In Progress", "Resolved"];
+    const next = order[(order.indexOf(t.status || "Open") + 1) % order.length];
     try {
       await api(`/tickets/${t.id}/update`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: next,
           userId: auth.currentUser?.uid,
         }),
       });
-      setTickets(prev => prev.map(x => x.id===t.id ? {...x, status: next} : x));
-    } catch (e) {
-      console.warn("Update denied:", e.message);
-    }
-  };
-
-  const cyclePriority = async (t) => {
-    const order = ["Low","Medium","High"];
-    const next = order[(order.indexOf(t.priority||"Low")+1) % order.length];
-    try {
-      await api(`/tickets/${t.id}/update`, {
-        method: "POST",
-        body: JSON.stringify({
-          priority: next,
-          userId: auth.currentUser?.uid,
-        }),
-      });
-      setTickets(prev => prev.map(x => x.id===t.id ? {...x, priority: next} : x));
+      setTickets((prev) =>
+        prev.map((x) => (x.id === t.id ? { ...x, status: next } : x))
+      );
     } catch (e) {
       console.warn("Update denied:", e.message);
     }
@@ -147,15 +169,24 @@ export default function TicketManagement() {
 
   const renderItem = ({ item }) => (
     <TouchableOpacity
-      onLongPress={() => cycleStatus(item)}
-      onPress={() => cyclePriority(item)}
-      activeOpacity={0.8}
-      style={[styles.card, { backgroundColor: ui.cardBg, borderColor: ui.border }]}
-    >
-      {item.imageUrl
-        ? <Image source={{ uri: item.imageUrl }} style={styles.thumbnail} />
-        : <View style={[styles.thumbnail, { backgroundColor: "#d1d5db" }]} />
+      onPress={() =>
+        navigation.navigate("TicketDetail", {
+          ticketId: item.id,
+          role: "organization",
+        })
       }
+      onLongPress={() => cycleStatus(item)}
+      activeOpacity={0.8}
+      style={[
+        styles.card,
+        { backgroundColor: ui.cardBg, borderColor: ui.border },
+      ]}
+    >
+      {item.imageUrl ? (
+        <Image source={{ uri: item.imageUrl }} style={styles.thumbnail} />
+      ) : (
+        <View style={[styles.thumbnail, { backgroundColor: "#d1d5db" }]} />
+      )}
 
       <View style={styles.info}>
         <View style={styles.row}>
@@ -166,7 +197,10 @@ export default function TicketManagement() {
             ]}
           />
           <Text style={[styles.priorityText, { color: ui.text }]}>
-            {item.priority || "N/A"} · <Text style={{ color: ui.subtext }}>{item.status || "Open"}</Text>
+            {item.priority || "N/A"} ·{" "}
+            <Text style={{ color: ui.subtext }}>
+              {item.status || "Open"}
+            </Text>
           </Text>
         </View>
 
@@ -175,7 +209,9 @@ export default function TicketManagement() {
         </Text>
 
         <Text style={{ color: ui.subtext, fontSize: 12 }}>
-          {new Date(item.createdAt?.toMillis?.() || Date.now()).toLocaleString()}
+          {new Date(
+            item.createdAt?.toMillis?.() || Date.now()
+          ).toLocaleString()}
         </Text>
       </View>
     </TouchableOpacity>
@@ -193,26 +229,44 @@ export default function TicketManagement() {
     <View style={[styles.container, { backgroundColor: ui.bg }]}>
       {/* фильтры */}
       <View style={styles.filterRow}>
-        {["All","Open","In Progress","Resolved"].map(f => (
+        {["All", "Open", "In Progress", "Resolved"].map((f) => (
           <TouchableOpacity
             key={f}
-            style={[styles.filterBtn, { backgroundColor: filter===f ? ui.accent : ui.buttonBg }]}
+            style={[
+              styles.filterBtn,
+              { backgroundColor: filter === f ? ui.accent : ui.buttonBg },
+            ]}
             onPress={() => setFilter(f)}
           >
-            <Text style={[styles.filterText, { color: filter===f ? "#fff" : ui.buttonText }]}>{f}</Text>
+            <Text
+              style={[
+                styles.filterText,
+                { color: filter === f ? "#fff" : ui.buttonText },
+              ]}
+            >
+              {f}
+            </Text>
           </TouchableOpacity>
         ))}
       </View>
 
       {/* сортировка */}
       <View style={styles.filterRow}>
-        {["createdAt","priority","status"].map(s => (
+        {["createdAt", "priority", "status"].map((s) => (
           <TouchableOpacity
             key={s}
-            style={[styles.filterBtn, { backgroundColor: sortBy===s ? ui.accent : ui.buttonBg }]}
+            style={[
+              styles.filterBtn,
+              { backgroundColor: sortBy === s ? ui.accent : ui.buttonBg },
+            ]}
             onPress={() => setSortBy(s)}
           >
-            <Text style={[styles.filterText, { color: sortBy===s ? "#fff" : ui.buttonText }]}>
+            <Text
+              style={[
+                styles.filterText,
+                { color: sortBy === s ? "#fff" : ui.buttonText },
+              ]}
+            >
               Sort: {s}
             </Text>
           </TouchableOpacity>
@@ -221,7 +275,7 @@ export default function TicketManagement() {
 
       <FlatList
         data={visible}
-        keyExtractor={i => i.id}
+        keyExtractor={(i) => i.id}
         renderItem={renderItem}
         contentContainerStyle={{ paddingBottom: 20 }}
       />

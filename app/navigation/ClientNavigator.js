@@ -1,15 +1,19 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import TicketManagement from "../screens/Client/TicketManagement";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import TicketManagement from "../screens/Client/TicketManagement"; // ⚠️ проверь путь
 import OrganizationProfileScreen from "../screens/User/OrganizationProfileScreen";
 import AnalyticsScreen from "../screens/Client/AnalyticsScreen";
-import ClientMapScreen from "../screens/Client/ClientMapScreen"; 
+import ClientMapScreen from "../screens/Client/ClientMapScreen";
+import TicketDetailScreen from "../screens/User/TicketDetailScreen";
 import colors from "../constants/colors";
 import Ionicons from "react-native-vector-icons/Ionicons";
 
 const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
 
-export default function ClientNavigator() {
+// 👉 табы организации
+function ClientTabs() {
   return (
     <Tab.Navigator
       initialRouteName="ManageTickets"
@@ -47,5 +51,23 @@ export default function ClientNavigator() {
         options={{ title: "Profile" }}
       />
     </Tab.Navigator>
+  );
+}
+
+// 👉 стек: табы + экран деталей
+export default function ClientNavigator() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen
+        name="ClientTabs"
+        component={ClientTabs}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="TicketDetail"
+        component={TicketDetailScreen}
+        options={{ title: "Ticket Detail" }}
+      />
+    </Stack.Navigator>
   );
 }
