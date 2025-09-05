@@ -1,4 +1,3 @@
-// firebase.js
 import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   initializeAuth,
@@ -19,17 +18,15 @@ const firebaseConfig = {
   measurementId: "G-FXNK2NX1RC"
 };
 
-// ✅ App
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// ✅ Auth (один раз инициализируем)
 let auth;
 try {
   auth = initializeAuth(app, {
     persistence: getReactNativePersistence(ReactNativeAsyncStorage),
   });
 } catch (e) {
-  auth = getAuth(app); // если уже инициализирован
+  auth = getAuth(app);
 }
 
 export { auth };

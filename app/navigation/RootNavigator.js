@@ -3,7 +3,6 @@ import { View, Text, Alert } from "react-native";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../../firebase";
 import { doc, getDoc } from "firebase/firestore";
-
 import {
   NavigationContainer,
   DefaultTheme,
@@ -76,7 +75,7 @@ export default function RootNavigator() {
         <Tab.Navigator
           screenOptions={({ route }) => ({
             headerShown: false,
-            tabBarShowLabel: false, // 🔹 убираем текст под иконками
+            tabBarShowLabel: false,
             tabBarIcon: ({ color, size }) => {
               let iconName;
               if (route.name === "Admin") iconName = "settings";

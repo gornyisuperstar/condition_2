@@ -5,9 +5,10 @@ import {
 } from "react-native";
 import { db, auth } from "../../../firebase";
 import {
-  collection, query, where, getDocs, orderBy, limit, doc, getDoc, updateDoc
+  collection, query, where, getDocs, orderBy, limit, doc, getDoc
 } from "firebase/firestore";
 import { useTheme } from "../../context/ThemeContext";
+import { api } from "../../utils/serverConfig";
 
 const priorityColors = { High: "#ef4444", Medium: "#f97316", Low: "#22c55e" };
 
@@ -63,7 +64,7 @@ export default function TicketManagement() {
           })));
         }
 
-        // 2) читаем тикеты данной организации (сервер фильтрует по orgCode)
+        // 2) читаем тикеты данной организации
         if (orgCode || orgSnap?.data()?.orgCode) {
           const oc = orgCode || orgSnap.data().orgCode;
           const q = query(
@@ -86,7 +87,6 @@ export default function TicketManagement() {
     load();
   }, [orgCode]);
 
-  // фильтрация по полигону и UI-фильтрам
   const visible = useMemo(() => {
     let items = tickets.filter(t =>
       territory.length === 0
@@ -104,24 +104,27 @@ export default function TicketManagement() {
       items.sort((a,b) => (order[a.priority]||9) - (order[b.priority]||9));
     } else if (sortBy === "status") {
       items.sort((a,b) => (a.status||"").localeCompare(b.status||""));
-    } else { // createdAt
+    } else {
       items.sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
     }
     return items;
   }, [tickets, territory, filter, sortBy]);
 
-  // быстрый апдейт статуса/приоритета (пример)
+  // ✅ теперь обновляем через сервер
   const cycleStatus = async (t) => {
     const order = ["Open","In Progress","Resolved"];
     const next = order[(order.indexOf(t.status||"Open")+1) % order.length];
     try {
-      await updateDoc(doc(db,"tickets",t.id), {
-        status: next,
-        updatedAt: new Date()
+      await api(`/tickets/${t.id}/update`, {
+        method: "POST",
+        body: JSON.stringify({
+          status: next,
+          userId: auth.currentUser?.uid,
+        }),
       });
       setTickets(prev => prev.map(x => x.id===t.id ? {...x, status: next} : x));
     } catch (e) {
-      console.warn("Update denied by rules:", e.message);
+      console.warn("Update denied:", e.message);
     }
   };
 
@@ -129,13 +132,16 @@ export default function TicketManagement() {
     const order = ["Low","Medium","High"];
     const next = order[(order.indexOf(t.priority||"Low")+1) % order.length];
     try {
-      await updateDoc(doc(db,"tickets",t.id), {
-        priority: next,
-        updatedAt: new Date()
+      await api(`/tickets/${t.id}/update`, {
+        method: "POST",
+        body: JSON.stringify({
+          priority: next,
+          userId: auth.currentUser?.uid,
+        }),
       });
       setTickets(prev => prev.map(x => x.id===t.id ? {...x, priority: next} : x));
     } catch (e) {
-      console.warn("Update denied by rules:", e.message);
+      console.warn("Update denied:", e.message);
     }
   };
 
@@ -190,16 +196,10 @@ export default function TicketManagement() {
         {["All","Open","In Progress","Resolved"].map(f => (
           <TouchableOpacity
             key={f}
-            style={[
-              styles.filterBtn,
-              { backgroundColor: filter===f ? ui.accent : ui.buttonBg }
-            ]}
+            style={[styles.filterBtn, { backgroundColor: filter===f ? ui.accent : ui.buttonBg }]}
             onPress={() => setFilter(f)}
           >
-            <Text style={[
-              styles.filterText,
-              { color: filter===f ? "#fff" : ui.buttonText }
-            ]}>{f}</Text>
+            <Text style={[styles.filterText, { color: filter===f ? "#fff" : ui.buttonText }]}>{f}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -209,16 +209,10 @@ export default function TicketManagement() {
         {["createdAt","priority","status"].map(s => (
           <TouchableOpacity
             key={s}
-            style={[
-              styles.filterBtn,
-              { backgroundColor: sortBy===s ? ui.accent : ui.buttonBg }
-            ]}
+            style={[styles.filterBtn, { backgroundColor: sortBy===s ? ui.accent : ui.buttonBg }]}
             onPress={() => setSortBy(s)}
           >
-            <Text style={[
-              styles.filterText,
-              { color: sortBy===s ? "#fff" : ui.buttonText }
-            ]}>
+            <Text style={[styles.filterText, { color: sortBy===s ? "#fff" : ui.buttonText }]}>
               Sort: {s}
             </Text>
           </TouchableOpacity>
@@ -246,7 +240,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 15,
     marginVertical: 5,
     borderRadius: 12,
-    height: 80, // чтобы 10 карточек влезало на iPhone 14 Pro
+    height: 80,
   },
   thumbnail: { width: 60, height: 60, borderRadius: 8, marginRight: 10 },
   info: { flex: 1 },

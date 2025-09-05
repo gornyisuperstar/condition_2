@@ -1,4 +1,3 @@
-// app/screens/User/TicketListScreen.js
 import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -9,7 +8,6 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { db, storage } from "../../../firebase";
 import {
   collection,
   onSnapshot,
@@ -17,39 +15,10 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import { ref, getDownloadURL } from "firebase/storage";
+import { db } from "../../../firebase";
 import { useTheme } from "../../context/ThemeContext";
 import { useAuth } from "../../navigation/AuthProvider";
-
-// простой кэш для gs:// → https
-const urlCache = new Map();
-async function toHttp(url) {
-  if (!url) return null;
-
-  // 🚑 починка старых ссылок localhost → 10.0.2.2
-  if (url.startsWith("http://localhost")) {
-    return url.replace("localhost", "10.0.2.2");
-  }
-
-  // ✅ если уже http(s), возвращаем как есть
-  if (url.startsWith("http://") || url.startsWith("https://")) {
-    return url;
-  }
-
-  // ✅ firebase storage (gs://)
-  if (url.startsWith("gs://")) {
-    if (urlCache.has(url)) return urlCache.get(url);
-    try {
-      const http = await getDownloadURL(ref(storage, url));
-      urlCache.set(url, http);
-      return http;
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
-}
+import { normalizeImageUrl } from "../../utils/imageUrl";
 
 export default function TicketListScreen({ navigation }) {
   const { appTheme } = useTheme();
@@ -86,7 +55,7 @@ export default function TicketListScreen({ navigation }) {
       const rows = await Promise.all(
         snap.docs.map(async (d) => {
           const data = d.data();
-          const img = await toHttp(data.imageUrl || null);
+          const img = await normalizeImageUrl(data.imageUrl || null);
           return { id: d.id, ...data, imageUrl: img };
         })
       );

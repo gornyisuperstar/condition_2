@@ -1,4 +1,3 @@
-// app/screens/User/TicketDetailScreen.js
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -11,32 +10,10 @@ import {
   Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { db, storage, auth } from "../../../firebase";
+import { db, auth } from "../../../firebase";
 import { doc, getDoc, deleteDoc } from "firebase/firestore";
-import { ref, getDownloadURL } from "firebase/storage";
 import { useTheme } from "../../context/ThemeContext";
-
-// универсальный нормалайзер ссылок
-async function normalizeImageUrl(url) {
-  if (!url) return null;
-
-  // если уже http(s) → оставить
-  if (url.startsWith("http://") || url.startsWith("https://")) {
-    return url;
-  }
-
-  // если firebase storage
-  if (url.startsWith("gs://")) {
-    try {
-      const r = ref(storage, url);
-      return await getDownloadURL(r);
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
-}
+import { normalizeImageUrl } from "../../utils/imageUrl";
 
 export default function TicketDetailScreen({ route, navigation }) {
   const { ticketId } = route.params;
@@ -117,7 +94,10 @@ export default function TicketDetailScreen({ route, navigation }) {
         ) : (
           <Image
             source={require("../../assets/issue-radar-logo.png")}
-            style={[styles.image, { tintColor: isDark ? "#666" : "#999", opacity: 0.3  }]}
+            style={[
+              styles.image,
+              { tintColor: isDark ? "#666" : "#999", opacity: 0.3 },
+            ]}
             resizeMode="contain"
           />
         )}
